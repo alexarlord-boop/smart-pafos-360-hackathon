@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException, Query
-from datetime import date, datetime, timedelta
+from datetime import date, datetime
 from typing import Literal, Optional
 from dateutil.relativedelta import relativedelta
 
@@ -20,6 +20,16 @@ DAM_NAMES = Literal[
     "Polemidia", "Mavrokolympos", "Vyzakia", "Xyliatos", "Argaka",
     "Pomos", "Kalopanagiotis"
 ]
+
+
+def parse_target_date(date_str: Optional[str]) -> Optional[date]:
+    """Parse target date from DD.MM.YYYY format."""
+    if not date_str:
+        return None
+    try:
+        return datetime.strptime(date_str, "%d.%m.%Y").date()
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid date format. Use DD.MM.YYYY")
 
 
 def generate_dam_narrative(
@@ -70,25 +80,25 @@ def generate_dam_narrative(
 @router.get("/dam", response_model=DamDetailResponse)
 async def get_dam_detail(
     name: DAM_NAMES = Query(..., description="Dam name"),
-    days_ago: int = Query(default=0, ge=0, description="Number of days in the past (0 = latest available)")
+    target_date: Optional[str] = Query(default=None, description="Target date in DD.MM.YYYY format (empty = latest available)")
 ):
     """
     Get detailed information and narrative for a specific dam.
     
     Args:
         name: Dam name (from fixed list)
-        days_ago: Number of days in the past (0 = latest available data)
+        target_date: Date in DD.MM.YYYY format (empty = latest available data)
     
     Returns detailed dam info, year-over-year comparison, and narrative.
     """
     try:
-        # Calculate target date
-        target_date = date.today() - timedelta(days=days_ago) if days_ago > 0 else None
+        # Parse target date
+        query_date = parse_target_date(target_date)
         
         # Fetch all data
         dams_metadata = await cyprus_water_client.get_dams()
-        percentages_data = await cyprus_water_client.get_percentages(target_date)
-        storage_data = await cyprus_water_client.get_date_statistics(target_date)
+        percentages_data = await cyprus_water_client.get_percentages(query_date)
+        storage_data = await cyprus_water_client.get_date_statistics(query_date)
         
         # Parse data date
         date_str = percentages_data.get("date", "")

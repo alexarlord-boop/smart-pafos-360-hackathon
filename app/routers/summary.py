@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException, Query
-from datetime import date, datetime, timedelta
+from datetime import date, datetime
+from typing import Optional
 from dateutil.relativedelta import relativedelta
 
 from app.schemas import SummaryResponse
@@ -12,27 +13,37 @@ from app.services.cyprus_water import cyprus_water_client, parse_api_date
 router = APIRouter(prefix="/api", tags=["summary"])
 
 
+def parse_target_date(date_str: Optional[str]) -> Optional[date]:
+    """Parse target date from DD.MM.YYYY format."""
+    if not date_str:
+        return None
+    try:
+        return datetime.strptime(date_str, "%d.%m.%Y").date()
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid date format. Use DD.MM.YYYY")
+
+
 @router.get("/summary", response_model=SummaryResponse)
 async def get_summary(
-    days_ago: int = Query(default=0, ge=0, description="Number of days in the past (0 = latest available)")
+    target_date: Optional[str] = Query(default=None, description="Target date in DD.MM.YYYY format (empty = latest available)")
 ):
     """
     Get reservoir summary with comparison to last year.
     
     Args:
-        days_ago: Number of days in the past (0 = latest available data)
+        target_date: Date in DD.MM.YYYY format (empty = latest available data)
     
     Returns total percentage, storage, capacity, and year-over-year delta.
     """
     try:
-        # Calculate target date
-        target_date = date.today() - timedelta(days=days_ago) if days_ago > 0 else None
+        # Parse target date
+        query_date = parse_target_date(target_date)
         
         # Fetch percentages (contains totalPercentage, totalCapacityInMCM)
-        today_data = await cyprus_water_client.get_percentages(target_date)
+        today_data = await cyprus_water_client.get_percentages(query_date)
         
         # Also get storage data
-        today_stats = await cyprus_water_client.get_date_statistics(target_date)
+        today_stats = await cyprus_water_client.get_date_statistics(query_date)
         
         # Parse the date from response
         date_str = today_data.get("date", "")
