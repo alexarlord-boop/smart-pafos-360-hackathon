@@ -12,7 +12,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.database import init_db
-from app.routers import summary, dams, trend, risk, forecast, narrative
+from app.routers import summary, dams, trend, risk, forecast, narrative, dam_detail
 
 # Initialize FastAPI app
 app = FastAPI(
@@ -35,6 +35,7 @@ app.add_middleware(
 # Include routers
 app.include_router(summary.router)
 app.include_router(dams.router)
+app.include_router(dam_detail.router)
 app.include_router(trend.router)
 app.include_router(risk.router)
 app.include_router(forecast.router)
@@ -56,8 +57,9 @@ def read_root():
         "description": "Real-time dam water levels and predictive insights for Cyprus",
         "data_source": "https://cyprus-water.appspot.com",
         "endpoints": {
-            "summary": "/api/summary/today",
-            "dams": "/api/dams-today",
+            "summary": "/api/summary",
+            "dams": "/api/dams",
+            "dam_detail": "/api/dam?name={dam_name}",
             "trend": "/api/trend",
             "risk": "/api/risk",
             "forecast": "/api/forecast",

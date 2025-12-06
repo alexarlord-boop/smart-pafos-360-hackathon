@@ -87,9 +87,36 @@ class NarrativeResponse(BaseModel):
     data_date: date  # When the data was recorded
     fetched_at: datetime  # When we retrieved it
     narrative: str
-    current_percentage: float
-    last_year_percentage: float
+
+
+# Dam detail schemas
+class DamDetail(BaseModel):
+    """Detailed dam information."""
+    name: str
+    name_greek: Optional[str] = None
+    capacity_mcm: float
+    storage_mcm: Optional[float] = None
+    percentage: float
     risk_level: str
-    trend_30d: float
-    seasonal_factor: str
+    year_of_construction: Optional[int] = None
+    height: Optional[int] = None
+    lat: Optional[float] = None
+    lng: Optional[float] = None
+    image_url: Optional[str] = None
+    wikipedia_url: Optional[str] = None
+
+
+class DamComparison(BaseModel):
+    """Year-over-year comparison for a dam."""
+    last_year_percentage: Optional[float] = None
+    delta: Optional[float] = None
+
+
+class DamDetailResponse(BaseModel):
+    """Response for /api/dam endpoint."""
+    data_date: date
+    fetched_at: datetime
+    dam: DamDetail
+    comparison: DamComparison
+    narrative: str
 
