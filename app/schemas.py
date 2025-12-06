@@ -76,8 +76,11 @@ class ForecastResponse(BaseModel):
     """Response for /api/forecast endpoint."""
     data_date: date  # When the base data was recorded
     fetched_at: datetime  # When we retrieved it
-    horizon_months: int
-    projections: list[ForecastPoint]
+    target_date: date  # Future date being projected to
+    current_percentage: float  # Current water level %
+    projected_percentage: float  # Projected water level % at target_date
+    daily_change: float  # Average daily change in %
+    days_ahead: int  # Days between data_date and target_date
     methodology: str = "linear_extrapolation"
 
 

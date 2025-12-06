@@ -4,45 +4,46 @@ from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException, Query
 from datetime import date, datetime
-from typing import Optional
+from dateutil.relativedelta import relativedelta
 
-from app.schemas import ForecastResponse, ForecastPoint
+from app.schemas import ForecastResponse
 from app.services.cyprus_water import cyprus_water_client, parse_api_date
-from app.services.forecast import calculate_daily_change, generate_projection
+from app.services.forecast import calculate_daily_change
 
 router = APIRouter(prefix="/api", tags=["forecast"])
 
 
-def parse_target_date(date_str: Optional[str]) -> Optional[date]:
-    """Parse target date from DD.MM.YYYY format."""
-    if not date_str:
-        return None
+def parse_future_date(date_str: str) -> date:
+    """Parse and validate future date from DD.MM.YYYY format."""
     try:
-        return datetime.strptime(date_str, "%d.%m.%Y").date()
+        parsed_date = datetime.strptime(date_str, "%d.%m.%Y").date()
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid date format. Use DD.MM.YYYY")
+    
+    if parsed_date <= date.today():
+        raise HTTPException(status_code=400, detail="target_date must be in the future")
+    
+    return parsed_date
 
 
 @router.get("/forecast", response_model=ForecastResponse)
 async def get_forecast(
-    months: int = Query(default=3, ge=1, le=12, description="Projection horizon in months"),
-    target_date: Optional[str] = Query(default=None, description="Start date in DD.MM.YYYY format (empty = latest available)")
+    target_date: str = Query(..., description="Future target date in DD.MM.YYYY format")
 ):
     """
-    Get simple forward projection of total water levels.
+    Get projection of total water levels to a future date.
     
     Args:
-        months: Number of months to project forward
-        target_date: Start date in DD.MM.YYYY format (empty = latest available)
+        target_date: Future date in DD.MM.YYYY format to project to
     
     Uses linear extrapolation based on recent trend (no rain scenario).
     """
     try:
-        # Parse target date
-        query_date = parse_target_date(target_date)
+        # Parse and validate future date
+        forecast_target = parse_future_date(target_date)
         
-        # Fetch percentages
-        today_data = await cyprus_water_client.get_percentages(query_date)
+        # Fetch current percentages (latest available)
+        today_data = await cyprus_water_client.get_percentages()
         
         # Parse data date
         date_str = today_data.get("date", "")
@@ -78,27 +79,25 @@ async def get_forecast(
             # Fall back to a conservative estimate if not enough data
             daily_change = -0.05  # Assume slight decline
         
-        # Generate projections starting from data date
-        projections = generate_projection(
-            current_percentage=current_percentage,
-            daily_change=daily_change,
-            horizon_months=months,
-            start_date=data_date
-        )
+        # Calculate days until target
+        days_ahead = (forecast_target - data_date).days
         
-        # Convert to response format
-        forecast_points = [
-            ForecastPoint(date=proj_date, projected_percentage=proj_pct)
-            for proj_date, proj_pct in projections
-        ]
+        # Calculate projected percentage
+        projected_pct = current_percentage + (daily_change * days_ahead)
+        projected_pct = max(0.0, min(100.0, projected_pct))  # Clamp to valid range
         
         return ForecastResponse(
             data_date=data_date,
             fetched_at=datetime.utcnow(),
-            horizon_months=months,
-            projections=forecast_points,
+            target_date=forecast_target,
+            current_percentage=round(current_percentage, 1),
+            projected_percentage=round(projected_pct, 1),
+            daily_change=round(daily_change, 3),
+            days_ahead=days_ahead,
             methodology="linear_extrapolation"
         )
         
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to generate forecast: {str(e)}")
