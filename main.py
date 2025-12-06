@@ -12,7 +12,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.database import init_db
-from app.routers import summary, dams, trend, risk, forecast, narrative, dam_detail
+from app.routers import summary, dams, trend, forecast, narrative, dam_detail
 
 # Initialize FastAPI app
 app = FastAPI(
@@ -37,7 +37,6 @@ app.include_router(summary.router)
 app.include_router(dams.router)
 app.include_router(dam_detail.router)
 app.include_router(trend.router)
-app.include_router(risk.router)
 app.include_router(forecast.router)
 app.include_router(narrative.router)
 
@@ -61,7 +60,6 @@ def read_root():
             "dams": "/api/dams",
             "dam_detail": "/api/dam?name={dam_name}",
             "trend": "/api/trend",
-            "risk": "/api/risk",
             "forecast": "/api/forecast",
             "narrative": "/api/narrative",
             "docs": "/docs"
