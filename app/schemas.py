@@ -87,4 +87,9 @@ class NarrativeResponse(BaseModel):
     data_date: date  # When the data was recorded
     fetched_at: datetime  # When we retrieved it
     narrative: str
+    current_percentage: float
+    last_year_percentage: float
+    risk_level: str
+    trend_30d: float
+    seasonal_factor: str
 

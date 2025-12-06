@@ -129,7 +129,12 @@ async def get_narrative():
         return NarrativeResponse(
             data_date=data_date,
             fetched_at=datetime.utcnow(),
-            narrative=narrative
+            narrative=narrative,
+            current_percentage=current_percentage,
+            last_year_percentage=last_year_percentage,
+            risk_level=risk_level,
+            trend_30d=trend_30d,
+            seasonal_factor=seasonal_factor
         )
         
     except Exception as e:
