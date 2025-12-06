@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException, Query
 from datetime import date, datetime
+from typing import Optional
 from dateutil.relativedelta import relativedelta
 
 from app.schemas import TrendResponse, TrendPoint
@@ -12,21 +13,47 @@ from app.services.cyprus_water import cyprus_water_client
 router = APIRouter(prefix="/api", tags=["trend"])
 
 
+def parse_date(date_str: Optional[str]) -> Optional[date]:
+    """Parse date from DD.MM.YYYY format."""
+    if not date_str:
+        return None
+    try:
+        return datetime.strptime(date_str, "%d.%m.%Y").date()
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid date format. Use DD.MM.YYYY")
+
+
 @router.get("/trend", response_model=TrendResponse)
 async def get_trend(
-    years: int = Query(default=5, ge=1, le=10, description="Number of years of historical data")
+    start_date: Optional[str] = Query(default=None, description="Start date in DD.MM.YYYY format (default: 5 years ago)"),
+    end_date: Optional[str] = Query(default=None, description="End date in DD.MM.YYYY format (default: today)")
 ):
     """
     Get historical total percentage timeseries.
     
-    Returns daily/periodic data points for the specified number of years.
+    Args:
+        start_date: Start of period in DD.MM.YYYY format (default: 5 years ago)
+        end_date: End of period in DD.MM.YYYY format (default: today)
+    
+    Returns daily/periodic data points for the specified period.
     """
     try:
+        # Parse dates
+        parsed_start = parse_date(start_date)
+        parsed_end = parse_date(end_date)
+        
+        # Set defaults
+        if parsed_end is None:
+            parsed_end = date.today()
+        if parsed_start is None:
+            parsed_start = parsed_end - relativedelta(years=5)
+        
+        # Validate date range
+        if parsed_start > parsed_end:
+            raise HTTPException(status_code=400, detail="start_date must be before end_date")
+        
         # Fetch timeseries data from API
         timeseries_data = await cyprus_water_client.get_timeseries()
-        
-        # Calculate cutoff date
-        cutoff_date = date.today() - relativedelta(years=years)
         
         trend_points = []
         
@@ -40,8 +67,8 @@ async def get_trend(
                 # Parse date key (format: YYYY-MM-DD)
                 point_date = datetime.strptime(date_key, "%Y-%m-%d").date()
                 
-                # Filter by cutoff date
-                if point_date < cutoff_date:
+                # Filter by date range
+                if point_date < parsed_start or point_date > parsed_end:
                     continue
                 
                 # Get totalPercentage (decimal) and convert to %
