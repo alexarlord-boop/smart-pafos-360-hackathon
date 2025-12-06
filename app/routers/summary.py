@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException
-from datetime import date, datetime
+from fastapi import APIRouter, HTTPException, Query
+from datetime import date, datetime, timedelta
 from dateutil.relativedelta import relativedelta
 
 from app.schemas import SummaryResponse
@@ -12,19 +12,27 @@ from app.services.cyprus_water import cyprus_water_client, parse_api_date
 router = APIRouter(prefix="/api", tags=["summary"])
 
 
-@router.get("/summary/today", response_model=SummaryResponse)
-async def get_summary_today():
+@router.get("/summary", response_model=SummaryResponse)
+async def get_summary(
+    days_ago: int = Query(default=0, ge=0, description="Number of days in the past (0 = latest available)")
+):
     """
-    Get today's reservoir summary with comparison to last year.
+    Get reservoir summary with comparison to last year.
+    
+    Args:
+        days_ago: Number of days in the past (0 = latest available data)
     
     Returns total percentage, storage, capacity, and year-over-year delta.
     """
     try:
-        # Fetch today's percentages (contains totalPercentage, totalCapacityInMCM)
-        today_data = await cyprus_water_client.get_percentages()
+        # Calculate target date
+        target_date = date.today() - timedelta(days=days_ago) if days_ago > 0 else None
+        
+        # Fetch percentages (contains totalPercentage, totalCapacityInMCM)
+        today_data = await cyprus_water_client.get_percentages(target_date)
         
         # Also get storage data
-        today_stats = await cyprus_water_client.get_date_statistics()
+        today_stats = await cyprus_water_client.get_date_statistics(target_date)
         
         # Parse the date from response
         date_str = today_data.get("date", "")

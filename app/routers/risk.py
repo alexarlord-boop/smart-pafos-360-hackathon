@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from datetime import date, datetime, timedelta
 
 from app.schemas import RiskResponse, RiskFactors
@@ -13,15 +13,23 @@ router = APIRouter(prefix="/api", tags=["risk"])
 
 
 @router.get("/risk", response_model=RiskResponse)
-async def get_risk():
+async def get_risk(
+    days_ago: int = Query(default=0, ge=0, description="Number of days in the past (0 = latest available)")
+):
     """
-    Get current drought risk assessment.
+    Get drought risk assessment.
+    
+    Args:
+        days_ago: Number of days in the past (0 = latest available data)
     
     Returns risk level, score, and contributing factors.
     """
     try:
-        # Fetch current percentages
-        today_data = await cyprus_water_client.get_percentages()
+        # Calculate target date
+        target_date = date.today() - timedelta(days=days_ago) if days_ago > 0 else None
+        
+        # Fetch percentages
+        today_data = await cyprus_water_client.get_percentages(target_date)
         
         # Parse data date
         date_str = today_data.get("date", "")
@@ -33,9 +41,9 @@ async def get_risk():
         # Try to calculate 30-day trend
         trend_30d = None
         try:
-            # Get stats from 30 days ago
-            thirty_days_ago = date.today() - timedelta(days=30)
-            past_data = await cyprus_water_client.get_percentages(thirty_days_ago)
+            # Get stats from 30 days before the target date
+            trend_ref_date = data_date - timedelta(days=30)
+            past_data = await cyprus_water_client.get_percentages(trend_ref_date)
             past_percentage = past_data.get("totalPercentage", 0) * 100
             
             if past_percentage is not None:
@@ -48,11 +56,11 @@ async def get_risk():
         score, risk_level = calculate_risk_score(
             current_percentage=current_percentage,
             trend_30d=trend_30d,
-            current_date=date.today()
+            current_date=data_date
         )
         
         # Get seasonal factor
-        seasonal_factor = get_seasonal_factor(date.today())
+        seasonal_factor = get_seasonal_factor(data_date)
         
         return RiskResponse(
             data_date=data_date,

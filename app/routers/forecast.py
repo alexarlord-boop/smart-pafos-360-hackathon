@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException, Query
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 
 from app.schemas import ForecastResponse, ForecastPoint
 from app.services.cyprus_water import cyprus_water_client, parse_api_date
@@ -14,16 +14,24 @@ router = APIRouter(prefix="/api", tags=["forecast"])
 
 @router.get("/forecast", response_model=ForecastResponse)
 async def get_forecast(
-    months: int = Query(default=3, ge=1, le=12, description="Projection horizon in months")
+    months: int = Query(default=3, ge=1, le=12, description="Projection horizon in months"),
+    days_ago: int = Query(default=0, ge=0, description="Number of days in the past to start projection from (0 = latest available)")
 ):
     """
     Get simple forward projection of total water levels.
     
+    Args:
+        months: Number of months to project forward
+        days_ago: Number of days in the past to start projection from (0 = latest available)
+    
     Uses linear extrapolation based on recent trend (no rain scenario).
     """
     try:
-        # Fetch current percentages
-        today_data = await cyprus_water_client.get_percentages()
+        # Calculate target date
+        target_date = date.today() - timedelta(days=days_ago) if days_ago > 0 else None
+        
+        # Fetch percentages
+        today_data = await cyprus_water_client.get_percentages(target_date)
         
         # Parse data date
         date_str = today_data.get("date", "")
@@ -59,12 +67,12 @@ async def get_forecast(
             # Fall back to a conservative estimate if not enough data
             daily_change = -0.05  # Assume slight decline
         
-        # Generate projections
+        # Generate projections starting from data date
         projections = generate_projection(
             current_percentage=current_percentage,
             daily_change=daily_change,
             horizon_months=months,
-            start_date=date.today()
+            start_date=data_date
         )
         
         # Convert to response format

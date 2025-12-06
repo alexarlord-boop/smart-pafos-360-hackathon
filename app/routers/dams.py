@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException
-from datetime import date, datetime
+from fastapi import APIRouter, HTTPException, Query
+from datetime import date, datetime, timedelta
 
 from app.schemas import DamsResponse, DamStatus
 from app.services.cyprus_water import cyprus_water_client, parse_api_date
@@ -12,18 +12,26 @@ from app.services.risk import calculate_risk_level
 router = APIRouter(prefix="/api", tags=["dams"])
 
 
-@router.get("/dams-today", response_model=DamsResponse)
-async def get_dams_today():
+@router.get("/dams", response_model=DamsResponse)
+async def get_dams(
+    days_ago: int = Query(default=0, ge=0, description="Number of days in the past (0 = latest available)")
+):
     """
-    Get today's status for all dams.
+    Get status for all dams.
+    
+    Args:
+        days_ago: Number of days in the past (0 = latest available data)
     
     Returns list of dams with capacity, current percentage, and risk level.
     """
     try:
-        # Fetch dam metadata and today's percentages
+        # Calculate target date
+        target_date = date.today() - timedelta(days=days_ago) if days_ago > 0 else None
+        
+        # Fetch dam metadata and percentages
         dams_data = await cyprus_water_client.get_dams()
-        percentages_data = await cyprus_water_client.get_percentages()
-        storage_data = await cyprus_water_client.get_date_statistics()
+        percentages_data = await cyprus_water_client.get_percentages(target_date)
+        storage_data = await cyprus_water_client.get_date_statistics(target_date)
         
         # Parse the date from response
         date_str = percentages_data.get("date", "")

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from datetime import date, datetime, timedelta
 from typing import Optional
 from dateutil.relativedelta import relativedelta
@@ -70,15 +70,23 @@ def generate_narrative_text(
 
 
 @router.get("/narrative", response_model=NarrativeResponse)
-async def get_narrative():
+async def get_narrative(
+    days_ago: int = Query(default=0, ge=0, description="Number of days in the past (0 = latest available)")
+):
     """
-    Get a templated daily narrative summary.
+    Get a templated narrative summary.
     
-    Returns a human-readable summary of current water situation.
+    Args:
+        days_ago: Number of days in the past (0 = latest available data)
+    
+    Returns a human-readable summary of water situation.
     """
     try:
-        # Fetch current percentages
-        today_data = await cyprus_water_client.get_percentages()
+        # Calculate target date
+        target_date = date.today() - timedelta(days=days_ago) if days_ago > 0 else None
+        
+        # Fetch percentages
+        today_data = await cyprus_water_client.get_percentages(target_date)
         
         # Parse data date
         date_str = today_data.get("date", "")
@@ -87,8 +95,8 @@ async def get_narrative():
         # totalPercentage is decimal, convert to %
         current_percentage = today_data.get("totalPercentage", 0) * 100
         
-        # Get last year's data
-        last_year_date = date.today() - relativedelta(years=1)
+        # Get last year's data (same day, one year before data_date)
+        last_year_date = data_date - relativedelta(years=1)
         last_year_percentage = None
         try:
             last_year_data = await cyprus_water_client.get_percentages(last_year_date)
@@ -96,11 +104,11 @@ async def get_narrative():
         except Exception:
             pass
         
-        # Get 30-day trend
+        # Get 30-day trend (relative to data_date)
         trend_30d = None
         try:
-            thirty_days_ago = date.today() - timedelta(days=30)
-            past_data = await cyprus_water_client.get_percentages(thirty_days_ago)
+            thirty_days_before = data_date - timedelta(days=30)
+            past_data = await cyprus_water_client.get_percentages(thirty_days_before)
             past_percentage = past_data.get("totalPercentage", 0) * 100
             if past_percentage is not None:
                 trend_30d = current_percentage - past_percentage
@@ -111,11 +119,11 @@ async def get_narrative():
         _, risk_level = calculate_risk_score(
             current_percentage=current_percentage,
             trend_30d=trend_30d,
-            current_date=date.today()
+            current_date=data_date
         )
         
         # Get seasonal factor
-        seasonal_factor = get_seasonal_factor(date.today())
+        seasonal_factor = get_seasonal_factor(data_date)
         
         # Generate narrative
         narrative = generate_narrative_text(
