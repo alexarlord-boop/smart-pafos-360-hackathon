@@ -29,7 +29,7 @@ pip install -r requirements.txt
 ```bash
 uvicorn main:app --reload
 # or 
-fastapi run dev
+fastapi dev main.py
 ```
 
 The API will be available at **http://localhost:8000**
